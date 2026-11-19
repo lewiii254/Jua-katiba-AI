@@ -6,18 +6,25 @@ import {
   Brain,
   Building2,
   CheckCircle2,
+  ChevronRight,
   Flame,
   Globe2,
   Heart,
+  MessageSquare,
+  Play,
+  Scale,
   ScrollText,
   Sparkles,
   Trophy,
   Users,
+  Volume2,
   Vote,
 } from "lucide-react";
+import { useState } from "react";
 import heroImg from "@/assets/hero-civic.jpg";
 import { SiteShell } from "@/components/site/SiteShell";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   component: Home,
@@ -31,6 +38,7 @@ const lessons = [
     duration: "12 min",
     level: "Beginner",
     accent: "from-flag-green to-emerald-600",
+    slug: "bor-1",
   },
   {
     icon: Building2,
@@ -39,6 +47,7 @@ const lessons = [
     duration: "18 min",
     level: "Intermediate",
     accent: "from-amber-500 to-gold",
+    slug: "dev-1",
   },
   {
     icon: Vote,
@@ -47,6 +56,7 @@ const lessons = [
     duration: "15 min",
     level: "Beginner",
     accent: "from-flag-red to-rose-600",
+    slug: "elec-1",
   },
   {
     icon: Users,
@@ -55,6 +65,7 @@ const lessons = [
     duration: "10 min",
     level: "Beginner",
     accent: "from-indigo-500 to-flag-green",
+    slug: "foundations-3",
   },
 ];
 
@@ -87,10 +98,12 @@ function Home() {
       <Hero />
       <CivicPulse />
       <Stats />
+      <InnovationComparison />
       <FeaturedLessons />
       <HowItWorks />
       <ConstitutionHighlights />
       <DailyChallengeTeaser />
+      <WakiliTeaser />
       <Testimonials />
       <DailyFact />
       <Trending />
@@ -165,6 +178,65 @@ function DailyChallengeTeaser() {
                 {i + 1}
               </div>
             ))}
+          </div>
+        </div>
+      </motion.div>
+    </section>
+  );
+}
+
+function WakiliTeaser() {
+  return (
+    <section className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        whileInView={{ opacity: 1, y: 0 }}
+        viewport={{ once: true }}
+        className="relative overflow-hidden rounded-[2rem] border border-border bg-gradient-to-br from-card via-card to-flag-green/5 p-8 sm:p-12 card-elevated"
+      >
+        <div className="absolute -right-16 -bottom-16 h-64 w-64 rounded-full bg-flag-green/10 blur-3xl pointer-events-none" />
+        <div className="relative grid gap-8 lg:grid-cols-[1.3fr_1fr] lg:items-center">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full bg-flag-green/10 px-3 py-1 text-xs font-semibold text-flag-green">
+              <Scale className="h-3.5 w-3.5" /> Wakili Hub · Legal Marketplace
+            </div>
+            <h3 className="mt-4 font-display text-3xl font-bold sm:text-4xl">
+              Where Citizens Meet Verified Kenyan Advocates.
+            </h3>
+            <p className="mt-3 max-w-xl text-muted-foreground leading-relaxed">
+              Have a constitutional violation, land dispute, police bail issue, or employment matter?
+              Find verified Advocates of the High Court of Kenya, book consultations, or post your legal need directly.
+            </p>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link to="/lawyers">
+                <Button size="lg" className="rounded-full px-6 bg-flag-green hover:bg-flag-green/90 text-white">
+                  Find an Advocate <ArrowRight className="ml-1 h-4 w-4" />
+                </Button>
+              </Link>
+              <Link to="/lawyers">
+                <Button size="lg" variant="outline" className="rounded-full px-6">
+                  For Lawyers: List Your Practice
+                </Button>
+              </Link>
+            </div>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-2xl border border-border/80 bg-background/60 p-4 backdrop-blur-sm">
+              <div className="text-xl font-bold text-flag-green font-display">LSK Verified</div>
+              <div className="text-xs text-muted-foreground mt-1">Direct access to licensed Advocates across Kenya</div>
+            </div>
+            <div className="rounded-2xl border border-border/80 bg-background/60 p-4 backdrop-blur-sm">
+              <div className="text-xl font-bold text-gold font-display">47 Counties</div>
+              <div className="text-xs text-muted-foreground mt-1">Representation from Nairobi, Mombasa to Turkana</div>
+            </div>
+            <div className="rounded-2xl border border-border/80 bg-background/60 p-4 backdrop-blur-sm">
+              <div className="text-xl font-bold text-primary font-display">Pro-Bono & Paid</div>
+              <div className="text-xs text-muted-foreground mt-1">Connecting public interest matters with lawyers</div>
+            </div>
+            <div className="rounded-2xl border border-border/80 bg-background/60 p-4 backdrop-blur-sm">
+              <div className="text-xl font-bold text-foreground font-display">Direct Connect</div>
+              <div className="text-xs text-muted-foreground mt-1">WhatsApp, phone & video consultation booking</div>
+            </div>
           </div>
         </div>
       </motion.div>
@@ -412,35 +484,226 @@ function Stats() {
   );
 }
 
+function InnovationComparison() {
+  const [activeTab, setActiveTab] = useState<"gamified" | "sheng" | "audio" | "wakili">("gamified");
+
+  const innovations = [
+    {
+      id: "gamified" as const,
+      icon: Trophy,
+      label: "Interactive Dilemmas",
+      tag: "Wewe Ni Jaji",
+      headline: "Learn through real-life Kenyan street scenarios",
+      desc: "Instead of memorizing dry legal clauses, face real civic dilemmas: police stops, chief barazas, and county tender transparency. Choose your action, see the constitutional consequence, and earn XP.",
+      preview: {
+        title: "Scenario: Friday Night Police Roadblock",
+        situation: "An officer stops you at 9 PM in Westlands and demands your smartphone password to inspect your WhatsApp and M-Pesa balances.",
+        action: "Under Article 31 (Right to Privacy), you politely decline without a court warrant.",
+        outcome: "Sovereign rights protected · +25 XP earned",
+      },
+    },
+    {
+      id: "sheng" as const,
+      icon: MessageSquare,
+      label: "Sheng & Plain English",
+      tag: "Katiba Mtaani",
+      headline: "Translate complex legal jargon into language mwananchi speaks",
+      desc: "Every article and sub-lesson includes an instant toggle between Official Legal Text, Plain Everyday English, and authentic Kenyan Sheng so anyone from high schoolers to boda riders can understand.",
+      preview: {
+        title: "Article 1(1) in Kenyan Sheng",
+        situation: "Official: 'All sovereign power belongs to the people of Kenya.'",
+        action: "Sheng Translation: 'Power yote kwa hii nchi ni ya raia! Rais, MP, na Governors ni watu tumewa-loan hiyo power. Wakiharibu, raia wana mamlaka ya kuwawajibisha!'",
+        outcome: "100% Comprehensible for Kenyan Youth",
+      },
+    },
+    {
+      id: "audio" as const,
+      icon: Volume2,
+      label: "Sikiza Katiba",
+      tag: "Voice Reader",
+      headline: "Listen hands-free while commuting on a matatu",
+      desc: "Every card and section features native voice narration. Simply tap 'Sikiza Katiba' to have lessons read aloud clearly, making civic knowledge accessible to everyone, including auditory learners and commuters.",
+      preview: {
+        title: "Audio Narration Player",
+        situation: "Commuting along Thika Road or sitting in a matatu?",
+        action: "Tap 'Sikiza Katiba' to stream audio summaries of the Bill of Rights and devolution directly into your earphones.",
+        outcome: "Multi-sensory accessibility for all citizens",
+      },
+    },
+    {
+      id: "wakili" as const,
+      icon: Brain,
+      label: "Wakili AI Copilot",
+      tag: "24/7 Civic Mentor",
+      headline: "Ask anything, clarify rights, and get court precedents in real time",
+      desc: "Inside every lesson, Wakili AI provides instant answers, case law citations, and practical guidance on how to defend your rights under the 2010 Constitution.",
+      preview: {
+        title: "Live Question to Wakili AI",
+        situation: "Q: 'Can a landlord cut off my water if I dispute my utility bill?'",
+        action: "Wakili AI: 'Under Article 43(1)(d), clean and accessible water is a fundamental social right. Arbitrary disconnection without fair notice violates Article 47...'",
+        outcome: "Grounded in Constitution of Kenya 2010",
+      },
+    },
+  ];
+
+  const current = innovations.find((i) => i.id === activeTab) || innovations[0];
+
+  return (
+    <Section
+      eyebrow="The JuaKatiba AI Advantage"
+      title="Why JuaKatiba AI Beats Reading a 200-Page PDF"
+      desc="We transformed Kenya's Constitution from an intimidating legal book into an interactive, gamified learning academy."
+    >
+      <div className="grid gap-8 lg:grid-cols-[1.1fr_1fr] items-center">
+        {/* Tab buttons */}
+        <div className="space-y-3">
+          {innovations.map((item) => {
+            const isSelected = activeTab === item.id;
+            return (
+              <div
+                key={item.id}
+                role="button"
+                tabIndex={0}
+                onClick={() => setActiveTab(item.id)}
+                className={cn(
+                  "cursor-pointer rounded-3xl border p-5 transition-all duration-300 text-left select-none",
+                  isSelected
+                    ? "border-flag-green bg-flag-green/10 shadow-lg ring-1 ring-flag-green/20"
+                    : "border-border bg-card/60 hover:bg-card hover:border-border/80",
+                )}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <div
+                      className={cn(
+                        "grid h-10 w-10 place-items-center rounded-2xl text-white shadow-sm transition-transform",
+                        isSelected ? "bg-flag-green scale-105" : "bg-muted text-foreground",
+                      )}
+                    >
+                      <item.icon className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-display font-bold text-sm sm:text-base text-foreground">
+                          {item.label}
+                        </span>
+                        <span className="rounded-full bg-flag-green/15 px-2 py-0.5 text-[10px] font-bold text-flag-green">
+                          {item.tag}
+                        </span>
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                        {item.headline}
+                      </p>
+                    </div>
+                  </div>
+                  <ChevronRight
+                    className={cn(
+                      "h-4 w-4 text-muted-foreground transition-transform",
+                      isSelected && "text-flag-green translate-x-1",
+                    )}
+                  />
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Live Feature Preview Card */}
+        <motion.div
+          key={current.id}
+          initial={{ opacity: 0, y: 15 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.3 }}
+          className="rounded-3xl border-2 border-flag-green/30 bg-card p-6 sm:p-8 shadow-xl card-elevated"
+        >
+          <div className="flex items-center justify-between gap-2 border-b border-border/60 pb-4">
+            <div className="flex items-center gap-2">
+              <span className="grid h-8 w-8 place-items-center rounded-xl bg-flag-green/20 text-flag-green font-bold text-sm">
+                <Sparkles className="h-4 w-4" />
+              </span>
+              <div>
+                <div className="text-xs font-bold text-foreground">{current.headline}</div>
+                <div className="text-[11px] text-muted-foreground">{current.tag} Live Experience</div>
+              </div>
+            </div>
+            <Link to="/learn" search={{ lesson: "bor-1" }}>
+              <Button size="sm" className="rounded-full text-xs font-semibold gap-1.5 shadow-sm">
+                <Play className="h-3 w-3 fill-current" /> Try It Now
+              </Button>
+            </Link>
+          </div>
+
+          <p className="mt-4 text-xs sm:text-sm text-muted-foreground leading-relaxed">
+            {current.desc}
+          </p>
+
+          <div className="mt-5 rounded-2xl border border-border bg-muted/40 p-5 space-y-2.5">
+            <div className="text-xs font-bold uppercase tracking-wider text-flag-green">
+              {current.preview.title}
+            </div>
+            <p className="text-xs text-foreground font-medium">
+              {current.preview.situation}
+            </p>
+            <div className="rounded-xl border border-border/70 bg-background p-3 text-xs text-muted-foreground">
+              {current.preview.action}
+            </div>
+            <div className="text-xs font-bold text-flag-green pt-1 flex items-center gap-1.5">
+              <CheckCircle2 className="h-4 w-4" /> {current.preview.outcome}
+            </div>
+          </div>
+        </motion.div>
+      </div>
+    </Section>
+  );
+}
+
 function FeaturedLessons() {
   return (
     <Section
       eyebrow="Featured lessons"
       title="Start with the essentials"
-      desc="Curated journeys through the most important parts of the Constitution."
+      desc="Bite-sized interactive micro-lessons through the most vital parts of the Constitution."
     >
       <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {lessons.map((l, i) => (
-          <motion.div
+          <Link
             key={l.title}
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true, margin: "-50px" }}
-            transition={{ duration: 0.5, delay: i * 0.07 }}
-            whileHover={{ y: -4 }}
-            className="group relative overflow-hidden rounded-3xl border border-border bg-card p-6 card-elevated"
+            to="/learn"
+            search={{ lesson: l.slug }}
+            className="block"
           >
-            <div className={`mb-5 grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br ${l.accent} text-white shadow-lg`}>
-              <l.icon className="h-6 w-6" />
-            </div>
-            <h3 className="font-display text-lg font-semibold">{l.title}</h3>
-            <p className="mt-2 text-sm text-muted-foreground">{l.desc}</p>
-            <div className="mt-5 flex items-center justify-between text-xs text-muted-foreground">
-              <span className="rounded-full bg-muted px-2.5 py-1">{l.level}</span>
-              <span>{l.duration}</span>
-            </div>
-            <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-flag-green via-gold to-flag-red opacity-0 transition-opacity group-hover:opacity-100" />
-          </motion.div>
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              whileInView={{ opacity: 1, y: 0 }}
+              viewport={{ once: true, margin: "-50px" }}
+              transition={{ duration: 0.5, delay: i * 0.07 }}
+              whileHover={{ y: -4 }}
+              className="group relative flex flex-col justify-between h-full overflow-hidden rounded-3xl border border-border bg-card p-6 card-elevated transition-all hover:border-flag-green/60"
+            >
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className={`grid h-12 w-12 place-items-center rounded-2xl bg-gradient-to-br ${l.accent} text-white shadow-lg`}>
+                    <l.icon className="h-6 w-6" />
+                  </div>
+                  <span className="rounded-full bg-gold/15 px-2.5 py-0.5 text-[10px] font-bold text-gold">
+                    +50 XP
+                  </span>
+                </div>
+                <h3 className="font-display text-lg font-semibold text-foreground group-hover:text-flag-green transition-colors">
+                  {l.title}
+                </h3>
+                <p className="mt-2 text-sm text-muted-foreground">{l.desc}</p>
+              </div>
+
+              <div className="mt-5 border-t border-border/50 pt-4 flex items-center justify-between text-xs text-muted-foreground">
+                <span className="rounded-full bg-muted px-2.5 py-1">{l.level}</span>
+                <span className="font-semibold text-flag-green flex items-center gap-1 group-hover:underline">
+                  <Play className="h-3 w-3 fill-current" /> Study Now
+                </span>
+              </div>
+              <div className="absolute inset-x-0 bottom-0 h-1 bg-gradient-to-r from-flag-green via-gold to-flag-red opacity-0 transition-opacity group-hover:opacity-100" />
+            </motion.div>
+          </Link>
         ))}
       </div>
     </Section>

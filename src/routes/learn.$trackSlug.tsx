@@ -1,15 +1,29 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { AnimatePresence, motion } from "framer-motion";
-import { ArrowLeft, BookOpen, CheckCircle2, ChevronDown, Circle, Clock, Lock, Sparkles, Target } from "lucide-react";
-import { useState } from "react";
+import {
+  ArrowLeft,
+  BookOpen,
+  CheckCircle2,
+  ChevronDown,
+  Circle,
+  Clock,
+  Lock,
+  Play,
+  Sparkles,
+  Target,
+  Trophy,
+} from "lucide-react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { InteractiveLessonPlayer } from "@/components/learn/InteractiveLessonPlayer";
 import { SiteShell } from "@/components/site/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { findTrack, type Lesson, type LessonSection } from "@/data/learn-content";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { getGamificationState, subscribeGamification } from "@/lib/gamification";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/learn/$trackSlug")({
@@ -56,6 +70,25 @@ function TrackDetailPage() {
   const { user } = useAuth();
   const qc = useQueryClient();
   const [open, setOpen] = useState<Record<string, Set<number>>>({});
+  const [activeLesson, setActiveLesson] = useState<Lesson | null>(null);
+
+  const [gameState, setGameState] = useState(getGamificationState());
+  useEffect(() => {
+    return subscribeGamification(setGameState);
+  }, []);
+
+  // Auto-open active lesson if specified in URL query or hash
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    const targetSlug = params.get("lesson") || window.location.hash.replace("#", "");
+    if (targetSlug) {
+      const found = track.lessons.find((l: Lesson) => l.slug === targetSlug);
+      if (found) {
+        setActiveLesson(found);
+      }
+    }
+  }, [track.lessons]);
 
   const { data: progress } = useQuery({
     queryKey: ["progress", user?.id],
@@ -95,41 +128,73 @@ function TrackDetailPage() {
     });
   };
 
-  const done = track.lessons.filter((l: Lesson) => progress?.get(l.slug)?.completed).length;
+  const done = track.lessons.filter(
+    (l: Lesson) => progress?.get(l.slug)?.completed || gameState.completedLessons.includes(l.slug),
+  ).length;
   const pct = Math.round((done / track.lessons.length) * 100);
+
+  const handleNextLesson = () => {
+    if (!activeLesson) return;
+    const currentIdx = track.lessons.findIndex((l: Lesson) => l.slug === activeLesson.slug);
+    if (currentIdx >= 0 && currentIdx < track.lessons.length - 1) {
+      setActiveLesson(track.lessons[currentIdx + 1]);
+    } else {
+      setActiveLesson(null);
+    }
+  };
 
   return (
     <SiteShell>
+      {/* Interactive Lesson Player */}
+      {activeLesson && (
+        <InteractiveLessonPlayer
+          lesson={activeLesson}
+          track={track}
+          onClose={() => setActiveLesson(null)}
+          onNextLesson={handleNextLesson}
+        />
+      )}
+
       <section className={`relative overflow-hidden border-b border-border/60 bg-gradient-to-br ${track.color} text-white`}>
         <div className="absolute inset-0 pattern-kente opacity-15" />
         <div className="relative mx-auto max-w-5xl px-4 py-14 sm:px-6 lg:px-8">
           <Link to="/learn" className="inline-flex items-center gap-1.5 text-sm text-white/85 hover:text-white">
             <ArrowLeft className="h-4 w-4" /> All tracks
           </Link>
-          <div className="mt-4 flex items-center gap-4">
-            <div className="grid h-14 w-14 place-items-center rounded-2xl bg-white/15 backdrop-blur">
-              <track.icon className="h-7 w-7" />
+          <div className="mt-4 flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+            <div className="flex items-center gap-4">
+              <div className="grid h-16 w-16 place-items-center rounded-2xl bg-white/15 backdrop-blur shadow-md">
+                <track.icon className="h-8 w-8" />
+              </div>
+              <div>
+                <div className="text-xs font-semibold uppercase tracking-widest text-white/80">Interactive Module</div>
+                <h1 className="font-display text-3xl font-bold sm:text-4xl">{track.title}</h1>
+              </div>
             </div>
-            <div>
-              <div className="text-xs font-semibold uppercase tracking-widest text-white/80">Learning track</div>
-              <h1 className="font-display text-3xl font-bold sm:text-4xl">{track.title}</h1>
-            </div>
+
+            <Button
+              onClick={() => setActiveLesson(track.lessons[0])}
+              size="lg"
+              className="bg-white text-foreground hover:bg-white/90 rounded-full font-bold shadow-lg"
+            >
+              <Play className="mr-2 h-4 w-4 fill-current text-flag-green" />
+              Start Full Module Experience
+            </Button>
           </div>
-          <p className="mt-5 max-w-2xl text-white/90">{track.longDesc}</p>
+
+          <p className="mt-5 max-w-2xl text-white/90 leading-relaxed">{track.longDesc}</p>
           <div className="mt-6 flex flex-wrap items-center gap-4 text-sm">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">
-              <BookOpen className="h-3.5 w-3.5" /> {track.lessons.length} lessons
+              <BookOpen className="h-3.5 w-3.5" /> {track.lessons.length} sub-lessons
             </span>
             <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">
-              <Sparkles className="h-3.5 w-3.5 text-gold" /> +{track.lessons.length * 10} XP available
+              <Sparkles className="h-3.5 w-3.5 text-gold" /> +{track.lessons.length * 50} XP available
             </span>
-            {user && (
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">
-                <Target className="h-3.5 w-3.5" /> {done}/{track.lessons.length} complete · {pct}%
-              </span>
-            )}
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-white/15 px-3 py-1.5 backdrop-blur">
+              <Target className="h-3.5 w-3.5" /> {done}/{track.lessons.length} complete · {pct}%
+            </span>
           </div>
-          {user && <Progress value={pct} className="mt-4 h-1.5 bg-white/20" />}
+          <Progress value={pct} className="mt-4 h-1.5 bg-white/20" />
         </div>
       </section>
 
@@ -137,10 +202,10 @@ function TrackDetailPage() {
         <section className="border-b border-border/60 bg-muted/40">
           <div className="mx-auto flex max-w-5xl flex-wrap items-center justify-between gap-3 px-4 py-4 sm:px-6 lg:px-8">
             <span className="inline-flex items-center gap-2 text-sm text-muted-foreground">
-              <Lock className="h-4 w-4" /> Sign in to save your progress and earn XP as you learn.
+              <Lock className="h-4 w-4" /> Guest mode active · XP and progress saved locally. Sign in anytime to sync to cloud!
             </span>
             <Link to="/auth" search={{ redirect: `/learn/${track.slug}` }}>
-              <Button size="sm" className="rounded-full">Sign in</Button>
+              <Button size="sm" className="rounded-full">Sign in to sync</Button>
             </Link>
           </div>
         </section>
@@ -150,7 +215,7 @@ function TrackDetailPage() {
         <div className="space-y-6">
           {track.lessons.map((lesson: Lesson, idx: number) => {
             const p = progress?.get(lesson.slug);
-            const isDone = !!p?.completed;
+            const isDone = !!p?.completed || gameState.completedLessons.includes(lesson.slug);
             const openSet = open[lesson.slug] ?? new Set<number>();
 
             return (
@@ -163,18 +228,25 @@ function TrackDetailPage() {
                 id={lesson.slug}
                 className={cn(
                   "overflow-hidden rounded-3xl border bg-card card-elevated",
-                  isDone ? "border-flag-green/40" : "border-border",
+                  isDone ? "border-flag-green/40 bg-flag-green/[0.01]" : "border-border",
                 )}
               >
                 <header className="border-b border-border/60 p-6 sm:p-8">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                        Lesson {idx + 1} of {track.lessons.length}
+                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
+                    <div className="space-y-2 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
+                          Sub-Lesson {idx + 1} of {track.lessons.length}
+                        </span>
+                        <span className="rounded bg-gold/15 px-2 py-0.5 text-[10px] font-bold text-gold">
+                          +50 XP
+                        </span>
                       </div>
-                      <h2 className="mt-1 font-display text-2xl font-bold sm:text-3xl">{lesson.title}</h2>
-                      <p className="mt-2 text-muted-foreground">{lesson.summary}</p>
-                      <div className="mt-4 flex flex-wrap gap-2 text-xs">
+                      <h2 className="font-display text-2xl font-bold sm:text-3xl text-foreground">
+                        {lesson.title}
+                      </h2>
+                      <p className="text-sm text-muted-foreground">{lesson.summary}</p>
+                      <div className="flex flex-wrap gap-2 text-xs pt-1">
                         <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2.5 py-1">
                           <Clock className="h-3 w-3" /> {lesson.duration}
                         </span>
@@ -186,11 +258,21 @@ function TrackDetailPage() {
                         ))}
                       </div>
                     </div>
-                    {isDone && (
-                      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-flag-green/10 px-3 py-1.5 text-xs font-semibold text-flag-green">
-                        <CheckCircle2 className="h-3.5 w-3.5" /> Completed
-                      </span>
-                    )}
+
+                    <div className="flex sm:flex-col items-center sm:items-end gap-3 shrink-0 pt-2 sm:pt-0">
+                      <Button
+                        onClick={() => setActiveLesson(lesson)}
+                        className="rounded-full px-5 font-semibold text-xs shadow-md gap-1.5 hover:scale-105 transition-transform"
+                      >
+                        <Play className="h-3.5 w-3.5 fill-current" /> Study Interactive Lesson
+                      </Button>
+
+                      {isDone && (
+                        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-flag-green/10 px-3 py-1 text-xs font-semibold text-flag-green">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Mastered
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </header>
 
@@ -203,7 +285,7 @@ function TrackDetailPage() {
                           onClick={() => toggleSection(lesson.slug, sIdx)}
                           className="flex w-full items-center justify-between gap-4 px-6 py-4 text-left transition-colors hover:bg-muted/40 sm:px-8"
                         >
-                          <span className="font-display font-semibold">{section.heading}</span>
+                          <span className="font-display font-semibold text-sm sm:text-base">{section.heading}</span>
                           <ChevronDown
                             className={cn("h-4 w-4 shrink-0 text-muted-foreground transition-transform", isOpen && "rotate-180")}
                           />
@@ -239,30 +321,31 @@ function TrackDetailPage() {
                     ))}
                   </ul>
 
-                  <div className="mt-6 flex flex-wrap gap-2">
+                  <div className="mt-6 flex flex-wrap items-center gap-3">
+                    <Button
+                      onClick={() => setActiveLesson(lesson)}
+                      className="rounded-full text-xs font-semibold gap-1.5"
+                    >
+                      <Play className="h-3.5 w-3.5 fill-current" /> Open in Interactive Mode
+                    </Button>
+
                     <Button
                       onClick={() => saveProgress.mutate({ slug: lesson.slug, completed: !isDone })}
                       disabled={!user || saveProgress.isPending}
-                      variant={isDone ? "outline" : "default"}
-                      className="rounded-full"
+                      variant={isDone ? "outline" : "ghost"}
+                      size="sm"
+                      className="rounded-full text-xs"
                     >
                       {isDone ? (
                         <>
-                          <Circle className="mr-2 h-4 w-4" /> Mark as not complete
+                          <Circle className="mr-1.5 h-3.5 w-3.5" /> Mark not completed
                         </>
                       ) : (
                         <>
-                          <CheckCircle2 className="mr-2 h-4 w-4" /> Update my progress
+                          <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Mark completed
                         </>
                       )}
                     </Button>
-                    {!user && (
-                      <Link to="/auth" search={{ redirect: `/learn/${track.slug}` }}>
-                        <Button variant="outline" className="rounded-full">
-                          <Lock className="mr-2 h-4 w-4" /> Sign in to save
-                        </Button>
-                      </Link>
-                    )}
                   </div>
                 </div>
               </motion.article>
@@ -270,13 +353,13 @@ function TrackDetailPage() {
           })}
         </div>
 
-        <div className="mt-12 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-card p-6">
+        <div className="mt-12 flex flex-wrap items-center justify-between gap-4 rounded-3xl border border-border bg-card p-6 card-elevated">
           <div>
-            <div className="font-display text-lg font-semibold">Ready to test what you've learned?</div>
-            <p className="text-sm text-muted-foreground">Take a daily quiz and earn XP toward your streak.</p>
+            <div className="font-display text-lg font-semibold">Test your civic reflex with daily challenges</div>
+            <p className="text-sm text-muted-foreground">Take a daily quiz and earn XP toward your Katiba streak.</p>
           </div>
           <Link to="/quizzes">
-            <Button className="rounded-full">Go to quizzes</Button>
+            <Button className="rounded-full">Go to daily quizzes</Button>
           </Link>
         </div>
       </section>

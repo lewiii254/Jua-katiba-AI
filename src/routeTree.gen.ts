@@ -17,6 +17,7 @@ import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ConstitutionRouteImport } from './routes/constitution'
 import { Route as CountiesRouteImport } from './routes/counties'
 import { Route as IssuesRouteImport } from './routes/issues'
+import { Route as LawyersRouteImport } from './routes/lawyers'
 import { Route as LearnRouteImport } from './routes/learn'
 import { Route as QuizzesRouteImport } from './routes/quizzes'
 import { Route as AuthenticatedDashboardRouteImport } from './routes/_authenticated/dashboard'
@@ -62,6 +63,11 @@ const IssuesRoute = IssuesRouteImport.update({
   path: '/issues',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LawyersRoute = LawyersRouteImport.update({
+  id: '/lawyers',
+  path: '/lawyers',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LearnRoute = LearnRouteImport.update({
   id: '/learn',
   path: '/learn',
@@ -96,6 +102,7 @@ export interface FileRoutesByFullPath {
   '/constitution': typeof ConstitutionRoute
   '/counties': typeof CountiesRoute
   '/issues': typeof IssuesRoute
+  '/lawyers': typeof LawyersRoute
   '/learn': typeof LearnRouteWithChildren
   '/quizzes': typeof QuizzesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -110,6 +117,7 @@ export interface FileRoutesByTo {
   '/constitution': typeof ConstitutionRoute
   '/counties': typeof CountiesRoute
   '/issues': typeof IssuesRoute
+  '/lawyers': typeof LawyersRoute
   '/learn': typeof LearnRouteWithChildren
   '/quizzes': typeof QuizzesRouteWithChildren
   '/dashboard': typeof AuthenticatedDashboardRoute
@@ -126,6 +134,7 @@ export interface FileRoutesById {
   '/constitution': typeof ConstitutionRoute
   '/counties': typeof CountiesRoute
   '/issues': typeof IssuesRoute
+  '/lawyers': typeof LawyersRoute
   '/learn': typeof LearnRouteWithChildren
   '/quizzes': typeof QuizzesRouteWithChildren
   '/_authenticated/dashboard': typeof AuthenticatedDashboardRoute
@@ -142,6 +151,7 @@ export interface FileRouteTypes {
     | '/constitution'
     | '/counties'
     | '/issues'
+    | '/lawyers'
     | '/learn'
     | '/quizzes'
     | '/dashboard'
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/constitution'
     | '/counties'
     | '/issues'
+    | '/lawyers'
     | '/learn'
     | '/quizzes'
     | '/dashboard'
@@ -171,6 +182,7 @@ export interface FileRouteTypes {
     | '/constitution'
     | '/counties'
     | '/issues'
+    | '/lawyers'
     | '/learn'
     | '/quizzes'
     | '/_authenticated/dashboard'
@@ -187,6 +199,7 @@ export interface RootRouteChildren {
   ConstitutionRoute: typeof ConstitutionRoute
   CountiesRoute: typeof CountiesRoute
   IssuesRoute: typeof IssuesRoute
+  LawyersRoute: typeof LawyersRoute
   LearnRoute: typeof LearnRouteWithChildren
   QuizzesRoute: typeof QuizzesRouteWithChildren
 }
@@ -247,6 +260,13 @@ declare module '@tanstack/react-router' {
       path: '/issues'
       fullPath: '/issues'
       preLoaderRoute: typeof IssuesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lawyers': {
+      id: '/lawyers'
+      path: '/lawyers'
+      fullPath: '/lawyers'
+      preLoaderRoute: typeof LawyersRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/learn': {
@@ -329,6 +349,7 @@ const rootRouteChildren: RootRouteChildren = {
   ConstitutionRoute: ConstitutionRoute,
   CountiesRoute: CountiesRoute,
   IssuesRoute: IssuesRoute,
+  LawyersRoute: LawyersRoute,
   LearnRoute: LearnRouteWithChildren,
   QuizzesRoute: QuizzesRouteWithChildren,
 }

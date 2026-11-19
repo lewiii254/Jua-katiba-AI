@@ -17,6 +17,7 @@ import { cn } from "@/lib/utils";
 const links = [
   { to: "/", label: "Home" },
   { to: "/learn", label: "Learn" },
+  { to: "/lawyers", label: "Wakili Hub" },
   { to: "/constitution", label: "Constitution" },
   { to: "/quizzes", label: "Quizzes" },
   { to: "/issues", label: "Current Issues" },

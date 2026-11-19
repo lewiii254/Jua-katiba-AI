@@ -29,6 +29,7 @@ export function Footer() {
         <FooterCol
           title="Engage"
           links={[
+            ["Wakili Hub (Find a Lawyer)", "/lawyers"],
             ["Current Issues", "/issues"],
             ["Counties", "/counties"],
             ["Public Participation", "/learn"],
