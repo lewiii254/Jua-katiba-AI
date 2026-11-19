@@ -1,14 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { Award, BookOpen, Brain, Flame, Send, Sparkles, Target, TrendingUp } from "lucide-react";
-import { useState } from "react";
+import { Award, BookOpen, Brain, Flame, Loader2, Mic, MicOff, Send, Sparkles, Square, Target, TrendingUp, Volume2, VolumeX } from "lucide-react";
+import { useRef, useState } from "react";
+import { toast } from "sonner";
 import { SiteShell } from "@/components/site/SiteShell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/lib/auth";
+import { MarkdownMessage } from "@/lib/markdown-simple";
+import { playMsingiSpeech, stopCurrentAudio, transcribeVoiceRecording } from "@/lib/msingi-client";
+import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/_authenticated/dashboard")({
   head: () => ({
@@ -74,6 +78,75 @@ function Dashboard() {
   const greetingName = profile?.display_name ?? user?.email?.split("@")[0] ?? "friend";
 
   const [streaming, setStreaming] = useState(false);
+
+  // ── Msingi TTS / STT state ──────────────────────────────────────────────
+  const [speakingMsgIdx, setSpeakingMsgIdx] = useState<number | null>(null);
+  const [audioLoadingIdx, setAudioLoadingIdx] = useState<number | null>(null);
+  const [isListening, setIsListening] = useState(false);
+  const [isTranscribingDash, setIsTranscribingDash] = useState(false);
+  const dashMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const dashAudioChunksRef = useRef<Blob[]>([]);
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  // Auto-scroll to latest message
+  const scrollToBottom = () => chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+
+  const handlePlaySpeech = async (text: string, idx: number) => {
+    if (speakingMsgIdx === idx) {
+      stopCurrentAudio();
+      setSpeakingMsgIdx(null);
+      return;
+    }
+    stopCurrentAudio();
+    setAudioLoadingIdx(idx);
+    setSpeakingMsgIdx(null);
+    try {
+      await playMsingiSpeech(text, {
+        voiceId: "female3",
+        onStart: () => { setAudioLoadingIdx(null); setSpeakingMsgIdx(idx); },
+        onEnd: () => setSpeakingMsgIdx(null),
+        onError: () => { setAudioLoadingIdx(null); setSpeakingMsgIdx(null); toast.error("Audio playback failed"); },
+      });
+    } catch {
+      setAudioLoadingIdx(null);
+      setSpeakingMsgIdx(null);
+    }
+  };
+
+  const handleStartRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      dashAudioChunksRef.current = [];
+      const mr = new MediaRecorder(stream);
+      dashMediaRecorderRef.current = mr;
+      mr.ondataavailable = (e) => { if (e.data.size > 0) dashAudioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach((t) => t.stop());
+        const blob = new Blob(dashAudioChunksRef.current, { type: "audio/webm" });
+        setIsTranscribingDash(true);
+        try {
+          const result = await transcribeVoiceRecording(blob);
+          const transcript = result?.text;
+          if (transcript?.trim()) setInput(transcript.trim());
+          else toast.error("Could not transcribe audio. Try again.");
+        } catch {
+          toast.error("Transcription failed");
+        } finally {
+          setIsTranscribingDash(false);
+        }
+      };
+      mr.start();
+      setIsListening(true);
+    } catch {
+      toast.error("Microphone access denied");
+    }
+  };
+
+  const handleStopRecording = () => {
+    dashMediaRecorderRef.current?.stop();
+    dashMediaRecorderRef.current = null;
+    setIsListening(false);
+  };
 
   const send = async () => {
     if (!input.trim() || streaming) return;
@@ -148,6 +221,7 @@ function Dashboard() {
       });
     } finally {
       setStreaming(false);
+      setTimeout(scrollToBottom, 50);
     }
   };
 
@@ -258,19 +332,44 @@ function Dashboard() {
               </div>
             </div>
 
-            <div className="flex-1 space-y-3 overflow-y-auto p-5 text-sm" style={{ minHeight: 280 }}>
+            <div className="flex-1 space-y-3 overflow-y-auto p-5 text-sm" style={{ minHeight: 280, maxHeight: 420 }}>
               {msgs.map((m, i) => (
-                <div
-                  key={i}
-                  className={`max-w-[85%] rounded-2xl px-4 py-2.5 ${
-                    m.role === "ai"
-                      ? "bg-muted text-foreground"
-                      : "ml-auto bg-flag-green text-white"
-                  }`}
-                >
-                  {m.text}
+                <div key={i} className={cn("flex flex-col", m.role !== "ai" && "items-end")}>
+                  <div
+                    className={cn(
+                      "max-w-[88%] rounded-2xl px-4 py-2.5",
+                      m.role === "ai" ? "bg-muted text-foreground" : "bg-flag-green text-white",
+                    )}
+                  >
+                    {m.role === "ai" ? (
+                      <MarkdownMessage>{m.text}</MarkdownMessage>
+                    ) : (
+                      <span>{m.text}</span>
+                    )}
+                  </div>
+                  {m.role === "ai" && m.text && (
+                    <button
+                      onClick={() => handlePlaySpeech(m.text, i)}
+                      className="mt-1 flex items-center gap-1 text-[10px] text-flag-green hover:underline"
+                    >
+                      {audioLoadingIdx === i ? (
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                      ) : speakingMsgIdx === i ? (
+                        <VolumeX className="h-3 w-3" />
+                      ) : (
+                        <Volume2 className="h-3 w-3" />
+                      )}
+                      {speakingMsgIdx === i ? "Simama" : audioLoadingIdx === i ? "Inapakia…" : "Sikiza"}
+                    </button>
+                  )}
                 </div>
               ))}
+              {streaming && msgs[msgs.length - 1]?.role !== "ai" && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                  <Loader2 className="h-3 w-3 animate-spin" /> Thinking…
+                </div>
+              )}
+              <div ref={chatEndRef} />
             </div>
 
             <div className="flex gap-2 border-t border-border p-3">
@@ -278,11 +377,36 @@ function Dashboard() {
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && send()}
-                disabled={streaming}
-                placeholder={streaming ? "Thinking…" : "Ask about any article…"}
+                disabled={streaming || isListening || isTranscribingDash}
+                placeholder={
+                  isListening
+                    ? "🎙️ Recording… click stop to finish"
+                    : isTranscribingDash
+                      ? "Transcribing…"
+                      : streaming
+                        ? "Thinking…"
+                        : "Ask about any article…"
+                }
                 className="rounded-full"
               />
-              <Button onClick={send} disabled={streaming || !input.trim()} size="icon" className="rounded-full">
+              {/* Mic / Stop button */}
+              <Button
+                onClick={isListening ? handleStopRecording : handleStartRecording}
+                disabled={streaming || isTranscribingDash}
+                size="icon"
+                variant={isListening ? "destructive" : "outline"}
+                className="rounded-full shrink-0"
+                title={isListening ? "Stop recording" : "Voice input"}
+              >
+                {isTranscribingDash ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : isListening ? (
+                  <Square className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
+              <Button onClick={send} disabled={streaming || !input.trim() || isListening} size="icon" className="rounded-full shrink-0">
                 <Send className="h-4 w-4" />
               </Button>
             </div>

@@ -2,6 +2,7 @@ import "./lib/error-capture";
 
 import { consumeLastCapturedError } from "./lib/error-capture";
 import { renderErrorPage } from "./lib/error-page";
+import { synthesizeSpeechDirect, transcribeAudioDirect } from "./server/msingi";
 
 type ServerEntry = {
   fetch: (request: Request, env: unknown, ctx: unknown) => Promise<Response> | Response;
@@ -69,6 +70,35 @@ async function normalizeCatastrophicSsrResponse(response: Response): Promise<Res
 export default {
   async fetch(request: Request, env: unknown, ctx: unknown) {
     try {
+      const url = new URL(request.url);
+
+      if (url.pathname === "/api/msingi/speech") {
+        if (request.method === "POST") {
+          const body = (await request.json().catch(() => ({}))) as {
+            text?: string;
+            voice_id?: string;
+            voiceId?: string;
+          };
+          return await synthesizeSpeechDirect({
+            text: body.text || "",
+            voiceId: body.voice_id || body.voiceId || "female3",
+          });
+        }
+        if (request.method === "GET") {
+          const text = url.searchParams.get("text") || "";
+          const voiceId = url.searchParams.get("voice_id") || url.searchParams.get("voiceId") || "female3";
+          return await synthesizeSpeechDirect({ text, voiceId });
+        }
+        return new Response("Method Not Allowed", { status: 405 });
+      }
+
+      if (url.pathname === "/api/msingi/transcribe") {
+        if (request.method === "POST") {
+          return await transcribeAudioDirect(request);
+        }
+        return new Response("Method Not Allowed", { status: 405 });
+      }
+
       const handler = await getServerEntry();
       const response = await handler.fetch(request, env, ctx);
       return await normalizeCatastrophicSsrResponse(response);

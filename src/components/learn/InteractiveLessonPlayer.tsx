@@ -11,7 +11,9 @@ import {
   Flame,
   Globe2,
   HelpCircle,
+  Loader2,
   MessageSquare,
+  Mic,
   Play,
   RotateCcw,
   Scale,
@@ -36,6 +38,12 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { type Lesson, type Track } from "@/data/learn-content";
 import { getLessonGamification, type LessonGamification } from "@/data/lesson-gamification-data";
 import { askWakiliAI, type ChatMessage } from "@/lib/civic-ai-service";
+import { MarkdownMessage } from "@/lib/markdown-simple";
+import {
+  playMsingiSpeech,
+  stopCurrentAudio,
+  transcribeVoiceRecording,
+} from "@/lib/msingi-client";
 import {
   addXp,
   getNextRankProgress,
@@ -91,16 +99,24 @@ export function InteractiveLessonPlayer({
   // Text to Speech
   const [isSpeaking, setIsSpeaking] = useState(false);
 
-  // Wakili AI Drawer
+  // Wakili AI Drawer & Msingi Speech State
   const [isAiOpen, setIsAiOpen] = useState(false);
   const [aiMessages, setAiMessages] = useState<ChatMessage[]>([
     {
       role: "assistant",
-      content: `Habari! I am **Wakili AI**, your civic companion for **${lesson.title}**. Ask me to explain anything in Sheng, provide real-world examples, or clarify how ${lesson.articles.join(", ")} protect you!`,
+      content: `Habari! I am **Wakili AI**, your civic companion for **${lesson.title}**. Ask me in Swahili, Sheng, or English—you can type or click the microphone to talk with me!`,
     },
   ]);
   const [aiInput, setAiInput] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+
+  // Msingi Speech & Voice Chat State
+  const [playingAiMsgIdx, setPlayingAiMsgIdx] = useState<number | null>(null);
+  const [aiAudioLoadingIdx, setAiAudioLoadingIdx] = useState<number | null>(null);
+  const [isAiRecording, setIsAiRecording] = useState(false);
+  const [isAiTranscribing, setIsAiTranscribing] = useState(false);
+  const aiMediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const aiAudioChunksRef = useRef<Blob[]>([]);
 
   // Gamification state
   const [gameState, setGameState] = useState(getGamificationState());
@@ -242,17 +258,27 @@ export function InteractiveLessonPlayer({
     if (!text.trim() || aiLoading) return;
 
     const newMsgs: ChatMessage[] = [...aiMessages, { role: "user", content: text }];
-    setAiMessages(newMsgs);
+    // Add a streaming placeholder for the assistant reply
+    const streamingMsgs: ChatMessage[] = [...newMsgs, { role: "assistant", content: "" }];
+    setAiMessages(streamingMsgs);
     if (!promptText) setAiInput("");
     setAiLoading(true);
 
     try {
-      const reply = await askWakiliAI(newMsgs, {
-        title: lesson.title,
-        articles: lesson.articles,
-        summary: lesson.summary,
-      });
+      const reply = await askWakiliAI(
+        newMsgs,
+        {
+          title: lesson.title,
+          articles: lesson.articles,
+          summary: lesson.summary,
+        },
+        // onChunk: update the last message in real-time as tokens stream in
+        (currentText) => {
+          setAiMessages([...newMsgs, { role: "assistant", content: currentText }]);
+        },
+      );
 
+      // Set final complete reply (deduplicated — onChunk may have already set it)
       setAiMessages([...newMsgs, { role: "assistant", content: reply }]);
     } catch {
       setAiMessages([
@@ -264,6 +290,100 @@ export function InteractiveLessonPlayer({
       ]);
     } finally {
       setAiLoading(false);
+    }
+  };
+
+  // Play Msingi Swahili TTS for a Wakili assistant message
+  const handlePlayAiSpeech = async (idx: number, content: string) => {
+    if (playingAiMsgIdx === idx) {
+      stopCurrentAudio();
+      setPlayingAiMsgIdx(null);
+      return;
+    }
+
+    stopCurrentAudio();
+    setAiAudioLoadingIdx(idx);
+
+    try {
+      await playMsingiSpeech(content, {
+        voiceId: "female3",
+        onStart: () => {
+          setAiAudioLoadingIdx(null);
+          setPlayingAiMsgIdx(idx);
+        },
+        onEnd: () => {
+          setPlayingAiMsgIdx(null);
+        },
+        onError: (err) => {
+          setAiAudioLoadingIdx(null);
+          setPlayingAiMsgIdx(null);
+          toast.error(err.message || "Failed to play audio.");
+        },
+      });
+    } catch (err) {
+      setAiAudioLoadingIdx(null);
+      setPlayingAiMsgIdx(null);
+      toast.error(err instanceof Error ? err.message : "Failed to generate speech with Msingi.");
+    }
+  };
+
+  // Record voice and transcribe with Msingi STT
+  const handleStartAiRecording = async () => {
+    try {
+      stopCurrentAudio();
+      setPlayingAiMsgIdx(null);
+
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      aiAudioChunksRef.current = [];
+
+      const mimeType = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+        ? "audio/webm;codecs=opus"
+        : "audio/mp4";
+
+      const mr = new MediaRecorder(stream, { mimeType });
+      aiMediaRecorderRef.current = mr;
+
+      mr.ondataavailable = (e) => {
+        if (e.data.size > 0) aiAudioChunksRef.current.push(e.data);
+      };
+
+      mr.onstop = async () => {
+        stream.getTracks().forEach((track) => track.stop());
+        const blob = new Blob(aiAudioChunksRef.current, { type: mimeType });
+
+        if (blob.size < 1000) {
+          toast.info("Recording too short. Speak clearly and try again.");
+          return;
+        }
+
+        setIsAiTranscribing(true);
+        try {
+          const res = await transcribeVoiceRecording(blob);
+          if (res.text && res.text.trim()) {
+            toast.success("Voice transcribed by Msingi STT!");
+            await handleSendAi(res.text.trim());
+          } else {
+            toast.info("No speech detected. Please speak into the mic.");
+          }
+        } catch (err) {
+          toast.error(err instanceof Error ? err.message : "Voice transcription failed.");
+        } finally {
+          setIsAiTranscribing(false);
+        }
+      };
+
+      mr.start();
+      setIsAiRecording(true);
+      toast.info("Listening... speak your question in Swahili, Sheng, or English.");
+    } catch {
+      toast.error("Microphone access denied. Please grant microphone permissions.");
+    }
+  };
+
+  const handleStopAiRecording = () => {
+    if (aiMediaRecorderRef.current && aiMediaRecorderRef.current.state === "recording") {
+      aiMediaRecorderRef.current.stop();
+      setIsAiRecording(false);
     }
   };
 
@@ -362,10 +482,63 @@ export function InteractiveLessonPlayer({
                           : "mr-auto bg-muted/70 text-foreground border border-border/60 rounded-tl-none",
                       )}
                     >
-                      <div className="whitespace-pre-wrap">{m.content}</div>
+                      {m.role === "user" ? (
+                        <div className="whitespace-pre-wrap">{m.content}</div>
+                      ) : (
+                        <MarkdownMessage>{m.content}</MarkdownMessage>
+                      )}
+
+                      {m.role === "assistant" && (
+                        <div className="mt-2.5 pt-2 border-t border-border/40 flex items-center justify-between gap-2">
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handlePlayAiSpeech(idx, m.content)}
+                            disabled={aiAudioLoadingIdx === idx}
+                            className={cn(
+                              "h-6 rounded-full text-[10px] gap-1 px-2.5 transition-colors",
+                              playingAiMsgIdx === idx
+                                ? "bg-red-500/10 text-red-600 hover:bg-red-500/20 border border-red-500/30"
+                                : "bg-background/80 hover:bg-background border border-border/60",
+                            )}
+                          >
+                            {aiAudioLoadingIdx === idx ? (
+                              <>
+                                <Loader2 className="h-2.5 w-2.5 animate-spin text-flag-green" />
+                                <span>Inatengeneza sauti...</span>
+                              </>
+                            ) : playingAiMsgIdx === idx ? (
+                              <>
+                                <Square className="h-2.5 w-2.5 fill-current text-red-500" />
+                                <span>Sitisha</span>
+                              </>
+                            ) : (
+                              <>
+                                <Volume2 className="h-2.5 w-2.5 text-flag-green" />
+                                <span>Sikiza (Msingi)</span>
+                              </>
+                            )}
+                          </Button>
+
+                          {playingAiMsgIdx === idx && (
+                            <span className="text-[10px] text-flag-green font-mono flex items-center gap-1">
+                              <span className="h-2 w-0.5 bg-flag-green animate-pulse" />
+                              <span className="h-3 w-0.5 bg-flag-green animate-bounce" />
+                              <span className="h-2 w-0.5 bg-flag-green animate-pulse" />
+                              female3
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </div>
                   ))}
-                  {aiLoading && (
+                  {isAiTranscribing && (
+                    <div className="mr-auto rounded-2xl bg-gold/10 border border-gold/30 p-3 text-xs text-gold flex items-center gap-2">
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      <span>Msingi STT: Inanukuu sauti yako...</span>
+                    </div>
+                  )}
+                  {aiLoading && aiMessages[aiMessages.length - 1]?.role !== "assistant" && (
                     <div className="mr-auto rounded-2xl bg-muted/70 p-3.5 text-xs text-muted-foreground animate-pulse">
                       Wakili AI is citing articles...
                     </div>
@@ -394,20 +567,42 @@ export function InteractiveLessonPlayer({
                   </button>
                 </div>
 
-                {/* AI Input */}
-                <div className="border-t p-3 bg-card flex gap-2">
+                {/* AI Input with Mic */}
+                <div className="border-t p-3 bg-card flex items-center gap-2">
+                  <Button
+                    type="button"
+                    size="icon"
+                    onClick={isAiRecording ? handleStopAiRecording : handleStartAiRecording}
+                    disabled={aiLoading || isAiTranscribing}
+                    className={cn(
+                      "rounded-full shrink-0 h-8 w-8 transition-all",
+                      isAiRecording
+                        ? "bg-red-600 text-white animate-pulse hover:bg-red-700"
+                        : "bg-flag-green/10 text-flag-green hover:bg-flag-green/20 border border-flag-green/30",
+                    )}
+                    title={isAiRecording ? "Stop recording" : "Record voice question"}
+                  >
+                    {isAiRecording ? <Square className="h-3.5 w-3.5 fill-current" /> : <Mic className="h-3.5 w-3.5" />}
+                  </Button>
                   <input
                     type="text"
                     value={aiInput}
                     onChange={(e) => setAiInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && handleSendAi()}
-                    placeholder="Ask Wakili AI anything about this lesson..."
+                    placeholder={
+                      isAiRecording
+                        ? "🎙️ Inarekodi... Zungumza sasa..."
+                        : isAiTranscribing
+                          ? "Inanukuu..."
+                          : "Ask Wakili AI or tap mic to talk..."
+                    }
+                    disabled={isAiRecording || isAiTranscribing}
                     className="flex-1 rounded-full border border-border bg-muted/50 px-3.5 py-2 text-xs focus:outline-none focus:ring-1 focus:ring-flag-green"
                   />
                   <Button
                     size="icon"
                     onClick={() => handleSendAi()}
-                    disabled={!aiInput.trim() || aiLoading}
+                    disabled={!aiInput.trim() || aiLoading || isAiRecording || isAiTranscribing}
                     className="rounded-full shrink-0 h-8 w-8"
                   >
                     <Send className="h-3.5 w-3.5" />

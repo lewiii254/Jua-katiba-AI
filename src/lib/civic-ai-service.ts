@@ -101,31 +101,34 @@ Ground your explanations in the Constitution of Kenya 2010. You can explain in c
         const reader = res.body.getReader();
         const decoder = new TextDecoder();
         let fullText = "";
+        let buffer = "";
 
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          const chunk = decoder.decode(value, { stream: true });
-          
-          // Parse SSE or plain text chunks
-          const lines = chunk.split("\n");
+
+          // Accumulate into a buffer so we never split an SSE line mid-read
+          buffer += decoder.decode(value, { stream: true });
+
+          // Process every complete line (SSE lines end with \n)
+          const lines = buffer.split("\n");
+          // Keep the last (potentially incomplete) fragment in buffer
+          buffer = lines.pop() ?? "";
+
           for (const line of lines) {
-            if (line.startsWith("data: ")) {
-              const dataStr = line.slice(6).trim();
-              if (dataStr === "[DONE]") continue;
-              try {
-                const parsed = JSON.parse(dataStr);
-                const delta = parsed.choices?.[0]?.delta?.content || "";
-                if (delta) {
-                  fullText += delta;
-                  if (onChunk) onChunk(fullText);
-                }
-              } catch {
-                // not json
+            if (!line.startsWith("data: ")) continue;
+            const dataStr = line.slice(6).trim();
+            if (dataStr === "[DONE]") continue;
+            try {
+              const parsed = JSON.parse(dataStr);
+              // Only extract the actual text delta — skip reasoning_details etc.
+              const delta: string = parsed.choices?.[0]?.delta?.content ?? "";
+              if (delta) {
+                fullText += delta;
+                if (onChunk) onChunk(fullText);
               }
-            } else if (chunk.length > 0 && !chunk.startsWith(":")) {
-              fullText += chunk;
-              if (onChunk) onChunk(fullText);
+            } catch {
+              // partial / non-JSON SSE comment — ignore
             }
           }
         }
