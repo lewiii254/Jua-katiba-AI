@@ -1,4 +1,4 @@
-# Jua Katiba AI
+# Jua Katiba AI🇰🇪
 
 <div align="center">
 
